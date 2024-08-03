@@ -1,0 +1,2 @@
+# squeal
+opinionated postgresql linter
