@@ -28,6 +28,9 @@ Not yet...
 
 ## Progress
 
+I may want to completely rewrite what I have done for now. It feels stupidly sloppy and short sighted. I'm really not pleased with it at all right now.
+Development should be clear so that anyone can add to it. I'm not sure I can say that about this project right now.
+
 - [x] Parse SQL
 - [x] Format `create table` statements
 - [ ] Format `select` statements
