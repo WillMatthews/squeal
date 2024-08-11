@@ -43,9 +43,9 @@ func printCreate(cs CreateStmt) string {
 
 	writeConstraints := func(b *strings.Builder, cons []string) {
 		for i, con := range cons {
-			builder.WriteString(con)
+			b.WriteString(con)
 			if i != len(cons)-1 {
-				builder.WriteString(" ")
+				b.WriteString(" ")
 			}
 		}
 	}
@@ -67,9 +67,8 @@ func printCreate(cs CreateStmt) string {
 		}
 		builder.WriteString("\n")
 	}
-	builder.WriteString(")")
+	builder.WriteString(");")
 
-	fmt.Println(builder.String())
 	return builder.String()
 }
 
@@ -87,7 +86,7 @@ func calcPositions(columns []CreateStmtColumn) (int, int) {
 }
 
 func parseCreate(stmt *pg_query.CreateStmt) (CreateStmt, error) {
-	fmt.Println(stmt)
+	// fmt.Println(stmt)
 
 	tbl := CreateStmt{
 		Relation: stmt.Relation.Relname,
@@ -110,12 +109,56 @@ func parseCreate(stmt *pg_query.CreateStmt) (CreateStmt, error) {
 	return tbl, nil
 }
 
+func parseDefault(c *pg_query.Constraint) string {
+	out := "default"
+	if c.GetRawExpr() != nil {
+		aconst := c.GetRawExpr().GetAConst()
+		switch {
+		case aconst.Val == nil:
+			out += "null"
+		case aconst.GetBoolval() != nil:
+			bval := aconst.GetBoolval().Boolval
+			out += fmt.Sprintf(" %t", bval)
+		case aconst.GetFval() != nil:
+			fval := aconst.GetFval().Fval
+			out += fmt.Sprintf(" %s", fval)
+		case aconst.GetIval() != nil:
+			ival := aconst.GetIval().Ival
+			out += fmt.Sprintf(" %d", ival)
+		case aconst.GetSval() != nil:
+			sval := aconst.GetSval()
+			out += fmt.Sprintf(" '%s'", sval)
+		default:
+			panic("Unknown constraint default type" + fmt.Sprintf("%T", aconst.Val))
+		}
+	}
+	return out
+}
+
 func parseConstraints(constraints []*pg_query.Node) []string {
 	var cons []string
 	for _, c := range constraints {
 		switch c.Node.(type) {
 		case *pg_query.Node_Constraint:
-			cons = append(cons, c.GetConstraint().Contype.String())
+			switch c.GetConstraint().Contype {
+			case pg_query.ConstrType_CONSTR_PRIMARY:
+				cons = append(cons, "primary key")
+			case pg_query.ConstrType_CONSTR_UNIQUE:
+				cons = append(cons, "unique")
+			case pg_query.ConstrType_CONSTR_FOREIGN:
+				cons = append(cons, "foreign key")
+			case pg_query.ConstrType_CONSTR_NOTNULL:
+				cons = append(cons, "not null")
+			case pg_query.ConstrType_CONSTR_DEFAULT:
+				cons = append(cons, parseDefault(c.GetConstraint()))
+			case pg_query.ConstrType_CONSTR_CHECK:
+				cons = append(cons, "check")
+			default:
+
+				// Feel free to open a PR to add the missing constraint types
+				panic("Unknown constraint type" + fmt.Sprintf("%T", c.Node))
+			}
+
 		default:
 			panic("Unknown constraint type" + fmt.Sprintf("%T", c.Node))
 		}
