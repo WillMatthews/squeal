@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	pg_query "github.com/pganalyze/pg_query_go/v5"
 )
@@ -17,19 +18,17 @@ func main() {
 	in, err := os.ReadFile("./test-sql/unformatted.sql")
 	check(err)
 
-	s, err := parse(string(in))
+	s, err := makeSqlTree(string(in))
 	check(err)
 
 	// fmt.Println((s))
-	deparsePretty(s)
-
-	// out, err := deparse(s)
-	// check(err)
-
-	// fmt.Println(out)
+	out, err := parsePretty(s)
+	check(err)
+	fmt.Println(out)
+	_ = out
 }
 
-func parse(s string) (*pg_query.ParseResult, error) {
+func makeSqlTree(s string) (*pg_query.ParseResult, error) {
 	result, err := pg_query.Parse(s)
 	if err != nil {
 		return nil, err
@@ -38,19 +37,18 @@ func parse(s string) (*pg_query.ParseResult, error) {
 	return result, nil
 }
 
-func deparsePretty(sql *pg_query.ParseResult) (string, error) {
+func parsePretty(sql *pg_query.ParseResult) (string, error) {
+	sb := new(strings.Builder)
 	for _, statement := range sql.Stmts {
 		stmt := statement.GetStmt()
-		fmt.Println("\n\n\n=================STATEMENT=================")
-
+		fmt.Printf("\n---------------%T---------------\n", stmt.Node)
 		d, err := decideDeparse(stmt)
 		check(err)
 
-		_ = d
-
+		sb.WriteString(d)
 	}
 
-	return "", nil
+	return sb.String(), nil
 }
 
 func decideDeparse(stmt *pg_query.Node) (string, error) {
@@ -60,14 +58,11 @@ func decideDeparse(stmt *pg_query.Node) (string, error) {
 		check(err)
 		return printCreate(cs), nil
 	case *pg_query.Node_SelectStmt:
-		return deparseSelect(stmt.GetSelectStmt())
+		sel, err := parseSelect(stmt.GetSelectStmt())
+		check(err)
+
+		return printSelect(sel), nil
 	default:
 		panic("Unknown statement type" + fmt.Sprintf("%T", stmt.Node))
 	}
-}
-
-func deparseSelect(stmt *pg_query.SelectStmt) (string, error) {
-	fmt.Println(stmt)
-
-	return "", nil
 }

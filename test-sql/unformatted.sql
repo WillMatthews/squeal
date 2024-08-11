@@ -13,6 +13,14 @@ FROM foo_bar_baz
 WHERE qux = TRUE
 ORDER BY baz DESC;
 
+select foo from bar having baz LIKE qux;
+
+-- select foo, bar, baz
+-- from foo_foo as f
+-- join foo_bar_baz as b on f.id = b.quux
+-- where b.qux = true
+-- order by b.baz desc;
+
 -- ALTER TABLE foo_bar_baz ADD COLUMN quux TEXT;
 
 -- DROP TABLE foo_bar_baz;

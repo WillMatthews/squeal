@@ -135,6 +135,15 @@ func parseDefault(c *pg_query.Constraint) string {
 	return out
 }
 
+func parseFK(c *pg_query.Constraint) string {
+	b := new(strings.Builder)
+	b.WriteString(c.Pktable.Relname)
+	b.WriteString("(")
+	b.WriteString(c.PkAttrs[0].GetString_().GetSval())
+	b.WriteString(")")
+	return b.String()
+}
+
 func parseConstraints(constraints []*pg_query.Node) []string {
 	var cons []string
 	for _, c := range constraints {
@@ -146,7 +155,8 @@ func parseConstraints(constraints []*pg_query.Node) []string {
 			case pg_query.ConstrType_CONSTR_UNIQUE:
 				cons = append(cons, "unique")
 			case pg_query.ConstrType_CONSTR_FOREIGN:
-				cons = append(cons, "foreign key")
+				ref := "references " + parseFK(c.GetConstraint())
+				cons = append(cons, ref)
 			case pg_query.ConstrType_CONSTR_NOTNULL:
 				cons = append(cons, "not null")
 			case pg_query.ConstrType_CONSTR_DEFAULT:
