@@ -3,7 +3,9 @@ CREATE TABLE foo_bar_baz (
     foo VARCHAR(255) NOT NULL,
     bar INTEGER NOT NULL,
     baz DATE,
-    qux BOOLEAN DEFAULT FALSE
+    qux BOOLEAN DEFAULT FALSE,
+    quux uuid not null default 123 references foo_foo(id),
+    holymoly vectors.vector not null
 );
 
 SELECT foo, bar, baz
