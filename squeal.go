@@ -56,7 +56,7 @@ func decideDeparse(stmt *pg_query.Node) (string, error) {
 	case *pg_query.Node_CreateStmt:
 		cs, err := parseCreate(stmt.GetCreateStmt())
 		check(err)
-		return printCreate(cs), nil
+		return cs.String(), nil
 	case *pg_query.Node_SelectStmt:
 		sel, err := parseSelect(stmt.GetSelectStmt())
 		check(err)

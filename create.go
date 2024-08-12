@@ -8,61 +8,33 @@ import (
 	pg_query "github.com/pganalyze/pg_query_go/v5"
 )
 
-type CreateStmt struct {
+const (
+	defaultTypeSpace       = 1
+	defaultConstraintSpace = 1
+
+	useTabs    = false
+	tabSpacing = 4
+)
+
+type TableCreationStatement struct {
 	Relation string
-	Columns  []CreateStmtColumn
+	Columns  []TableColumn
 }
 
-type CreateStmtColumn struct {
+type TableColumn struct {
 	Name        string
 	Type        string
 	Constraints []string
 }
 
-func printCreate(cs CreateStmt) string {
+func (cs TableCreationStatement) String() string {
 	builder := new(strings.Builder)
 	builder.WriteString("create table " + cs.Relation + " (\n")
 
-	typePosition, constraintPosition := calcPositions(cs.Columns)
-
-	writeName := func(b *strings.Builder, name string, position int) {
-		b.WriteString(name)
-		spaces := position - len(name)
-		for i := 0; i < spaces; i++ {
-			b.WriteString(" ")
-		}
-	}
-
-	writeType := func(b *strings.Builder, typ string, position int) {
-		b.WriteString(typ)
-		spaces := position - len(typ)
-		for i := 0; i < spaces; i++ {
-			b.WriteString(" ")
-		}
-	}
-
-	writeConstraints := func(b *strings.Builder, cons []string) {
-		for i, con := range cons {
-			b.WriteString(con)
-			if i != len(cons)-1 {
-				b.WriteString(" ")
-			}
-		}
-	}
-
+	typePosition, constraintPosition := cs.calcPositions()
 	for iCol, col := range cs.Columns {
-		builder.WriteString("    ")
-		writeName(builder, col.Name, typePosition)
-
-		// If no constraints, do not add a space
-		position := constraintPosition
-		if len(col.Constraints) == 0 {
-			position = 0
-		}
-		writeType(builder, col.Type, position)
-		writeConstraints(builder, col.Constraints)
-
-		if iCol != len(cs.Columns)-1 {
+		writeColumn(builder, col, typePosition, constraintPosition)
+		if iCol < len(cs.Columns)-1 {
 			builder.WriteString(",")
 		}
 		builder.WriteString("\n")
@@ -72,30 +44,76 @@ func printCreate(cs CreateStmt) string {
 	return builder.String()
 }
 
-func calcPositions(columns []CreateStmtColumn) (int, int) {
+func pad(b *strings.Builder, position int) {
+	for i := 0; i < position; i++ {
+		b.WriteString(" ")
+	}
+}
+
+func writeName(b *strings.Builder, name string, position int) {
+	b.WriteString(name)
+	pad(b, position-len(name))
+}
+
+func writeType(b *strings.Builder, typ string, position int) {
+	b.WriteString(typ)
+	pad(b, position-len(typ))
+}
+
+func writeConstraints(b *strings.Builder, cons []string) {
+	for i, con := range cons {
+		b.WriteString(con)
+		if i != len(cons)-1 {
+			b.WriteString(" ")
+		}
+	}
+}
+
+func writeTab(b *strings.Builder) {
+	if useTabs {
+		b.WriteString("\t")
+	} else {
+		pad(b, tabSpacing)
+	}
+}
+
+func writeColumn(b *strings.Builder, col TableColumn, typePosition, constraintPosition int) {
+	writeTab(b)
+	writeName(b, col.Name, typePosition)
+
+	// If no constraints, do not add a space
+	position := constraintPosition
+	if len(col.Constraints) == 0 {
+		position = 0
+	}
+	writeType(b, col.Type, position)
+	writeConstraints(b, col.Constraints)
+}
+
+func (cs TableCreationStatement) calcPositions() (int, int) {
 	typePosition, constraintPosition := 0, 0
-	for _, col := range columns {
+	for _, col := range cs.Columns {
 		if len(col.Name) > typePosition {
-			typePosition = len(col.Name) + 1
+			typePosition = len(col.Name) + defaultTypeSpace
 		}
 		if len(col.Type) > constraintPosition {
-			constraintPosition = len(col.Type) + 1
+			constraintPosition = len(col.Type) + defaultConstraintSpace
 		}
 	}
 	return typePosition, constraintPosition
 }
 
-func parseCreate(stmt *pg_query.CreateStmt) (CreateStmt, error) {
+func parseCreate(stmt *pg_query.CreateStmt) (TableCreationStatement, error) {
 	// fmt.Println(stmt)
 
-	tbl := CreateStmt{
+	tbl := TableCreationStatement{
 		Relation: stmt.Relation.Relname,
 	}
 
 	for _, elt := range stmt.GetTableElts() {
 		switch elt.Node.(type) {
 		case *pg_query.Node_ColumnDef:
-			col := CreateStmtColumn{
+			col := TableColumn{
 				Name:        elt.GetColumnDef().Colname,
 				Type:        getColType(elt.GetColumnDef()),
 				Constraints: parseConstraints(elt.GetColumnDef().GetConstraints()),
@@ -110,29 +128,30 @@ func parseCreate(stmt *pg_query.CreateStmt) (CreateStmt, error) {
 }
 
 func parseDefault(c *pg_query.Constraint) string {
-	out := "default"
+	b := new(strings.Builder)
+	b.WriteString("default")
 	if c.GetRawExpr() != nil {
 		aconst := c.GetRawExpr().GetAConst()
 		switch {
 		case aconst.Val == nil:
-			out += "null"
+			b.WriteString(" null")
 		case aconst.GetBoolval() != nil:
 			bval := aconst.GetBoolval().Boolval
-			out += fmt.Sprintf(" %t", bval)
+			b.WriteString(fmt.Sprintf(" %t", bval))
 		case aconst.GetFval() != nil:
 			fval := aconst.GetFval().Fval
-			out += fmt.Sprintf(" %s", fval)
+			b.WriteString(fmt.Sprintf(" %s", fval))
 		case aconst.GetIval() != nil:
 			ival := aconst.GetIval().Ival
-			out += fmt.Sprintf(" %d", ival)
+			b.WriteString(fmt.Sprintf(" %d", ival))
 		case aconst.GetSval() != nil:
 			sval := aconst.GetSval()
-			out += fmt.Sprintf(" '%s'", sval)
+			b.WriteString(fmt.Sprintf(" '%s'", sval))
 		default:
 			panic("Unknown constraint default type" + fmt.Sprintf("%T", aconst.Val))
 		}
 	}
-	return out
+	return b.String()
 }
 
 func parseFK(c *pg_query.Constraint) string {
@@ -144,7 +163,9 @@ func parseFK(c *pg_query.Constraint) string {
 	return b.String()
 }
 
-func parseConstraints(constraints []*pg_query.Node) []string {
+type ConstraintNode = *pg_query.Node
+
+func parseConstraints(constraints []ConstraintNode) []string {
 	var cons []string
 	for _, c := range constraints {
 		switch c.Node.(type) {
@@ -170,7 +191,7 @@ func parseConstraints(constraints []*pg_query.Node) []string {
 			}
 
 		default:
-			panic("Unknown constraint type" + fmt.Sprintf("%T", c.Node))
+			panic("Not a constraint" + fmt.Sprintf("%T", c.Node))
 		}
 	}
 	return cons
